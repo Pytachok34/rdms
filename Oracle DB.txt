@@ -1,0 +1,427 @@
+-- Удаление таблиц, если они существуют
+
+BEGIN
+    EXECUTE IMMEDIATE 'DROP TABLE RaceResults CASCADE CONSTRAINTS';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN
+            RAISE;
+        END IF;
+END;
+/
+BEGIN
+    EXECUTE IMMEDIATE 'DROP TABLE Races CASCADE CONSTRAINTS';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN
+            RAISE;
+        END IF;
+END;
+/
+BEGIN
+    EXECUTE IMMEDIATE 'DROP TABLE Competitions CASCADE CONSTRAINTS';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN
+            RAISE;
+        END IF;
+END;
+/
+BEGIN
+    EXECUTE IMMEDIATE 'DROP TABLE TestRunParticipation CASCADE CONSTRAINTS';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN
+            RAISE;
+        END IF;
+END;
+/
+BEGIN
+    EXECUTE IMMEDIATE 'DROP TABLE TestRuns CASCADE CONSTRAINTS';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN
+            RAISE;
+        END IF;
+END;
+/
+BEGIN
+    EXECUTE IMMEDIATE 'DROP TABLE TestTracks CASCADE CONSTRAINTS';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN
+            RAISE;
+        END IF;
+END;
+/
+BEGIN
+    EXECUTE IMMEDIATE 'DROP TABLE Factories CASCADE CONSTRAINTS';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN
+            RAISE;
+        END IF;
+END;
+/
+BEGIN
+    EXECUTE IMMEDIATE 'DROP TABLE Staff CASCADE CONSTRAINTS';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN
+            RAISE;
+        END IF;
+END;
+/
+BEGIN
+    EXECUTE IMMEDIATE 'DROP TABLE Drivers CASCADE CONSTRAINTS';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN
+            RAISE;
+        END IF;
+END;
+/
+BEGIN
+    EXECUTE IMMEDIATE 'DROP TABLE TeamHeads CASCADE CONSTRAINTS';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN
+            RAISE;
+        END IF;
+END;
+/
+BEGIN
+    EXECUTE IMMEDIATE 'DROP TABLE Teams CASCADE CONSTRAINTS';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN
+            RAISE;
+        END IF;
+END;
+/
+-- Создание таблиц
+
+-- Команды
+CREATE TABLE Teams (
+    TeamID INT PRIMARY KEY,
+    Name VARCHAR(255) NOT NULL,
+    Country VARCHAR(100),
+    Status VARCHAR(50),
+    HeadID INT -- Foreign key to TeamHeads
+);
+
+-- Таблица руководителей команд
+CREATE TABLE TeamHeads (
+    HeadID INT PRIMARY KEY,
+    FirstName VARCHAR(50),
+    LastName VARCHAR(50),
+    MiddleName VARCHAR(50),
+    Gender CHAR(1),
+    OwnershipType VARCHAR(50),
+    OwnershipPercentage DECIMAL(5, 2)
+);
+
+-- Таблица гонщиков
+CREATE TABLE Drivers (
+    DriverID INT PRIMARY KEY,
+    FirstName VARCHAR(50),
+    LastName VARCHAR(50),
+    MiddleName VARCHAR(50),
+    DateOfBirth DATE,
+    Gender CHAR(1),
+    PolePositions INT,
+    Podiums INT,
+    LicenseType VARCHAR(50),
+    TeamID INT REFERENCES Teams(TeamID)
+);
+
+-- Таблица персонала
+CREATE TABLE Staff (
+    StaffID INT PRIMARY KEY,
+    FirstName VARCHAR(50),
+    LastName VARCHAR(50),
+    MiddleName VARCHAR(50),
+    Gender CHAR(1),
+    Position VARCHAR(100),
+    TeamID INT REFERENCES Teams(TeamID)
+);
+
+-- Таблица заводов
+CREATE TABLE Factories (
+    FactoryID INT PRIMARY KEY,
+    Name VARCHAR(255),
+    Address VARCHAR(255),
+    Type VARCHAR(100)
+);
+
+-- Таблица тестовых треков
+CREATE TABLE TestTracks (
+    TrackID INT PRIMARY KEY,
+    Name VARCHAR(255),
+    Address VARCHAR(255)
+);
+
+-- Test Runs
+CREATE TABLE TestRuns (
+    TestRunID INT PRIMARY KEY,
+    Date_ DATE,
+    TrackID INT REFERENCES TestTracks(TrackID)
+);
+
+-- Таблица тестовых заездов
+CREATE TABLE TestRunParticipation (
+    ParticipationID INT PRIMARY KEY,
+    TestRunID INT REFERENCES TestRuns(TestRunID),
+    ParticipantID INT,
+    ParticipantType VARCHAR(50) -- 'Driver' or 'Staff'
+);
+
+-- Таблица соревнований
+CREATE TABLE Competitions (
+    CompetitionID INT PRIMARY KEY,
+    Name VARCHAR(255),
+    Season NUMBER(4)
+);
+
+-- Таблица заездов
+CREATE TABLE Races (
+    RaceID INT PRIMARY KEY,
+    CompetitionID INT REFERENCES Competitions(CompetitionID),
+    Date_ DATE,
+    StageNumber INT,
+    RaceType VARCHAR(50),
+    TrackID INT REFERENCES TestTracks(TrackID),
+    TicketPrice DECIMAL(10, 2),
+    Visitors INT,
+    TicketsSold INT,
+    WeatherConditions VARCHAR(50)
+);
+
+-- Таблица результатов заездов
+CREATE TABLE RaceResults (
+    ResultID INT PRIMARY KEY,
+    RaceID INT REFERENCES Races(RaceID),
+    DriverID INT REFERENCES Drivers(DriverID),
+    TeamID INT REFERENCES Teams(TeamID),
+    Position INT,
+    Points INT
+);
+
+
+-- Пакет процедур и функций
+CREATE OR REPLACE PACKAGE Formula1Package AS
+    PROCEDURE InsertTestRunParticipation(
+        p_ParticipationID INT,
+        p_TestRunID INT,
+        p_ParticipantID INT,
+        p_ParticipantType VARCHAR2
+    );
+
+    FUNCTION CalculateDriverPoints(p_DriverID INT) RETURN INT;
+
+    PROCEDURE InsertRace(
+        p_RaceID INT,
+        p_CompetitionID INT,
+        p_Date DATE,
+        p_StageNumber INT,
+        p_RaceType VARCHAR2,
+        p_TrackID INT,
+        p_TicketPrice DECIMAL,
+        p_Visitors INT,
+        p_TicketsSold INT,
+        p_WeatherConditions VARCHAR2
+    );
+
+    FUNCTION GetRaceDetails(p_CompetitionID INT) RETURN SYS_REFCURSOR;
+END Formula1Package;
+/
+
+CREATE OR REPLACE PACKAGE BODY Formula1Package AS
+    PROCEDURE InsertTestRunParticipation(
+        p_ParticipationID INT, -- Новый параметр
+        p_TestRunID INT,
+        p_ParticipantID INT,
+        p_ParticipantType VARCHAR2
+    ) IS
+    BEGIN
+        INSERT INTO TestRunParticipation (ParticipationID, TestRunID, ParticipantID, ParticipantType)
+        VALUES (p_ParticipationID, p_TestRunID, p_ParticipantID, p_ParticipantType);
+    END InsertTestRunParticipation;
+    FUNCTION CalculateDriverPoints(p_DriverID INT) RETURN INT IS
+        total_points INT;
+    BEGIN
+        SELECT SUM(Points) INTO total_points
+        FROM RaceResults
+        WHERE DriverID = p_DriverID;
+        RETURN NVL(total_points, 0);
+    END CalculateDriverPoints;
+
+    PROCEDURE InsertRace(
+        p_RaceID INT,
+        p_CompetitionID INT,
+        p_Date DATE,
+        p_StageNumber INT,
+        p_RaceType VARCHAR2,
+        p_TrackID INT,
+        p_TicketPrice DECIMAL,
+        p_Visitors INT,
+        p_TicketsSold INT,
+        p_WeatherConditions VARCHAR2
+    ) IS
+    BEGIN
+        INSERT INTO Races (raceid, CompetitionID, Date_, StageNumber, RaceType, TrackID, TicketPrice, Visitors, TicketsSold, WeatherConditions)
+        VALUES (p_raceid,p_CompetitionID, p_Date, p_StageNumber, p_RaceType, p_TrackID, p_TicketPrice, p_Visitors, p_TicketsSold, p_WeatherConditions);
+    END InsertRace;
+
+    FUNCTION GetRaceDetails(p_CompetitionID INT) RETURN SYS_REFCURSOR IS
+        race_details SYS_REFCURSOR;
+    BEGIN
+        OPEN race_details FOR
+        SELECT *
+        FROM Races
+        WHERE CompetitionID = p_CompetitionID;
+        RETURN race_details;
+    END GetRaceDetails;
+END Formula1Package;
+/
+
+-- Примеры вставки данных
+INSERT INTO Teams (TeamID, Name, Country, Status, HeadID) VALUES (1, 'Team Alpha', 'USA', 'Active', 101);
+INSERT INTO Teams (TeamID, Name, Country, Status, HeadID) VALUES (2, 'Team Beta', 'UK', 'Active', 102);
+INSERT INTO Teams (TeamID, Name, Country, Status, HeadID) VALUES (3, 'Team Gamma', 'Germany', 'Active', 103);
+
+INSERT INTO TeamHeads (HeadID, FirstName, LastName, MiddleName, Gender, OwnershipType, OwnershipPercentage) 
+VALUES (101, 'John', 'Doe', 'A.', 'M', 'Private', 50.00);
+INSERT INTO TeamHeads (HeadID, FirstName, LastName, MiddleName, Gender, OwnershipType, OwnershipPercentage) 
+VALUES (102, 'Anna', 'Smith', 'B.', 'F', 'Corporate', 30.00);
+INSERT INTO TeamHeads (HeadID, FirstName, LastName, MiddleName, Gender, OwnershipType, OwnershipPercentage) 
+VALUES (103, 'Karl', 'Muller', 'C.', 'M', 'Private', 70.00);
+
+INSERT INTO Drivers (DriverID, FirstName, LastName, MiddleName, DateOfBirth, Gender, PolePositions, Podiums, LicenseType, TeamID) 
+VALUES (201, 'Lewis', 'Hamilton', 'C.', TO_DATE('1985-01-07', 'YYYY-MM-DD'), 'M', 103, 191, 'Super', 1);
+INSERT INTO Drivers (DriverID, FirstName, LastName, MiddleName, DateOfBirth, Gender, PolePositions, Podiums, LicenseType, TeamID) 
+VALUES (202, 'Max', 'Verstappen', 'E.', TO_DATE('1997-09-30', 'YYYY-MM-DD'), 'M', 90, 85, 'Super', 2);
+INSERT INTO Drivers (DriverID, FirstName, LastName, MiddleName, DateOfBirth, Gender, PolePositions, Podiums, LicenseType, TeamID) 
+VALUES (203, 'Sebastian', 'Vettel', 'D.', TO_DATE('1987-07-03', 'YYYY-MM-DD'), 'M', 57, 122, 'Super', 3);
+
+INSERT INTO Staff (StaffID, FirstName, LastName, MiddleName, Gender, Position, TeamID) 
+VALUES (301, 'Jane', 'Smith', 'B.', 'F', 'Engineer', 1);
+INSERT INTO Staff (StaffID, FirstName, LastName, MiddleName, Gender, Position, TeamID) 
+VALUES (302, 'Michael', 'Johnson', 'E.', 'M', 'Mechanic', 2);
+INSERT INTO Staff (StaffID, FirstName, LastName, MiddleName, Gender, Position, TeamID) 
+VALUES (303, 'Lisa', 'White', 'F.', 'F', 'Analyst', 3);
+
+INSERT INTO Factories (FactoryID, Name, Address, Type) 
+VALUES (401, 'Alpha Factory', '123 Factory Lane', 'Engine');
+INSERT INTO Factories (FactoryID, Name, Address, Type) 
+VALUES (402, 'Beta Factory', '789 Factory Blvd', 'Chassis');
+INSERT INTO Factories (FactoryID, Name, Address, Type) 
+VALUES (403, 'Gamma Factory', '456 Assembly Road', 'Tires');
+
+INSERT INTO TestTracks (TrackID, Name, Address) 
+VALUES (501, 'Alpha Test Track', '456 Test Road');
+INSERT INTO TestTracks (TrackID, Name, Address) 
+VALUES (502, 'Beta Testing Zone', '123 Circuit Ave');
+INSERT INTO TestTracks (TrackID, Name, Address) 
+VALUES (503, 'Gamma Circuit', '789 Lap Street');
+
+INSERT INTO TestRuns (TestRunID, Date_, TrackID) 
+VALUES (601, TO_DATE('2024-12-01', 'YYYY-MM-DD'), 501);
+INSERT INTO TestRuns (TestRunID, Date_, TrackID) 
+VALUES (602, TO_DATE('2024-12-05', 'YYYY-MM-DD'), 502);
+INSERT INTO TestRuns (TestRunID, Date_, TrackID) 
+VALUES (603, TO_DATE('2024-12-10', 'YYYY-MM-DD'), 503);
+
+INSERT INTO TestRunParticipation (ParticipationID, TestRunID, ParticipantID, ParticipantType) 
+VALUES (701, 601, 201, 'Driver');
+INSERT INTO TestRunParticipation (ParticipationID, TestRunID, ParticipantID, ParticipantType) 
+VALUES (702, 602, 202, 'Driver');
+INSERT INTO TestRunParticipation (ParticipationID, TestRunID, ParticipantID, ParticipantType) 
+VALUES (703, 603, 303, 'Staff');
+
+INSERT INTO Competitions (CompetitionID, Name, Season) 
+VALUES (801, 'Formula 1 World Championship', 2024);
+INSERT INTO Competitions (CompetitionID, Name, Season) 
+VALUES (802, 'Spring Grand Prix', 2023);
+INSERT INTO Competitions (CompetitionID, Name, Season) 
+VALUES (803, 'Autumn Grand Prix', 2023);
+
+INSERT INTO Races (RaceID, CompetitionID, Date_, StageNumber, RaceType, TrackID, TicketPrice, Visitors, TicketsSold, WeatherConditions) 
+VALUES (901, 801, TO_DATE('2024-12-10', 'YYYY-MM-DD'), 1, 'Grand Prix', 501, 150.00, 100000, 95000, 'Sunny');
+INSERT INTO Races (RaceID, CompetitionID, Date_, StageNumber, RaceType, TrackID, TicketPrice, Visitors, TicketsSold, WeatherConditions) 
+VALUES (902, 802, TO_DATE('2023-04-15', 'YYYY-MM-DD'), 1, 'Grand Prix', 502, 120.00, 85000, 82000, 'Rainy');
+INSERT INTO Races (RaceID, CompetitionID, Date_, StageNumber, RaceType, TrackID, TicketPrice, Visitors, TicketsSold, WeatherConditions) 
+VALUES (903, 803, TO_DATE('2023-10-20', 'YYYY-MM-DD'), 1, 'Grand Prix', 503, 140.00, 90000, 87000, 'Cloudy');
+-- Результаты для гонки 901 (Formula 1 World Championship)
+INSERT INTO RaceResults (ResultID, RaceID, DriverID, TeamID, Position, Points) 
+VALUES (1, 901, 201, 1, 1, 25); -- Lewis Hamilton - 1st place
+INSERT INTO RaceResults (ResultID, RaceID, DriverID, TeamID, Position, Points) 
+VALUES (2, 901, 202, 2, 2, 18); -- Max Verstappen - 2nd place
+INSERT INTO RaceResults (ResultID, RaceID, DriverID, TeamID, Position, Points) 
+VALUES (3, 901, 203, 3, 3, 15); -- Sebastian Vettel - 3rd place
+
+-- Результаты для гонки 902 (Spring Grand Prix)
+INSERT INTO RaceResults (ResultID, RaceID, DriverID, TeamID, Position, Points) 
+VALUES (4, 902, 202, 2, 1, 25); -- Max Verstappen - 1st place
+INSERT INTO RaceResults (ResultID, RaceID, DriverID, TeamID, Position, Points) 
+VALUES (5, 902, 201, 1, 2, 18); -- Lewis Hamilton - 2nd place
+INSERT INTO RaceResults (ResultID, RaceID, DriverID, TeamID, Position, Points) 
+VALUES (6, 902, 203, 3, 3, 15); -- Sebastian Vettel - 3rd place
+
+-- Результаты для гонки 903 (Autumn Grand Prix)
+INSERT INTO RaceResults (ResultID, RaceID, DriverID, TeamID, Position, Points) 
+VALUES (7, 903, 203, 3, 1, 25); -- Sebastian Vettel - 1st place
+INSERT INTO RaceResults (ResultID, RaceID, DriverID, TeamID, Position, Points) 
+VALUES (8, 903, 201, 1, 2 ,18); -- Lewis Hamilton - 2nd place
+INSERT INTO RaceResults (ResultID, RaceID, DriverID ,TeamID ,Position ,Points)
+VALUES (9 ,903 ,202 ,2 ,3 ,15); -- Max Verstappen - 3rd place
+
+
+-- Пример использования функций и процедур
+BEGIN
+    -- Вставка новых участников тестового заезда
+    Formula1Package.InsertTestRunParticipation(
+        p_ParticipationID => 2,
+        p_TestRunID => 601,
+        p_ParticipantID => 301,
+        p_ParticipantType => 'Staff'
+    );
+    
+    -- Подсчёт очков гонщика
+    DECLARE
+        total_points INT;
+    BEGIN
+        total_points := Formula1Package.CalculateDriverPoints(p_DriverID => 201);
+        DBMS_OUTPUT.PUT_LINE('Total points for Driver 201: ' || total_points);
+    END;
+
+    -- Вставить новую гонку
+    Formula1Package.InsertRace(
+        p_RaceID => 1,
+        p_CompetitionID => 801,
+        p_Date => TO_DATE('2024-12-15', 'YYYY-MM-DD'),
+        p_StageNumber => 2,
+        p_RaceType => 'Sprint',
+        p_TrackID => 501,
+        p_TicketPrice => 120.00,
+        p_Visitors => 80000,
+        p_TicketsSold => 75000,
+        p_WeatherConditions => 'Cloudy'
+    );
+
+    -- Выбрать данные гонки
+    DECLARE
+        race_cursor SYS_REFCURSOR;
+        race_row Races%ROWTYPE;
+    BEGIN
+        race_cursor := Formula1Package.GetRaceDetails(p_CompetitionID => 801);
+        LOOP
+            FETCH race_cursor INTO race_row;
+            EXIT WHEN race_cursor%NOTFOUND;
+            DBMS_OUTPUT.PUT_LINE('Race ID: ' || race_row.RaceID || ', Stage: ' || race_row.StageNumber);
+        END LOOP;
+        CLOSE race_cursor;
+    END;
+END;
+/
+SELECT * FROM Races;
